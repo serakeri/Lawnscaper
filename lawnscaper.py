@@ -25,6 +25,10 @@ class Lawnscaper(Frame):
 
 		self.tile_size = 50
 
+		# the game counts the border as tiles. store these offsets to make the top left coord (0, 0)
+		self.spawn_x_offset = 1
+		self.spawn_y_offset = 3
+
 		self.map_width = 16
 		self.map_height = 11
 
@@ -65,19 +69,39 @@ class Lawnscaper(Frame):
 				file.write(self.rom)
 
 	def set_tile_brush(self, argBrush):
-		print("set brush {}".format(argBrush))
-		sys.stdout.flush()
+		# print("set brush {}".format(argBrush))
+		# sys.stdout.flush()
 		self.current_brush = argBrush
 
 	def handle_click(self, event):
 		clicked_x = int(event.x / self.tile_size)
 		clicked_y = int(event.y / self.tile_size)
 		# print("clicked at", clicked_x, clicked_y)
-		sys.stdout.flush()
+		# sys.stdout.flush()
 
 		self.pressing_m1 = True
 
 		self.set_tile(clicked_x, clicked_y, self.current_brush)
+
+	def handle_rclick(self, event):
+
+		clicked_x = int(event.x / self.tile_size)
+		clicked_y = int(event.y / self.tile_size)
+		self.set_spawn_point(clicked_x, clicked_y)
+
+	def set_spawn_point(self, argX, argY):
+
+		# print("spawn {}, {}".format(argX, argY))
+		# sys.stdout.flush()
+
+		if argX < self.map_width and argY < self.map_height:
+
+			self.spawn_x = argX + self.spawn_x_offset
+			self.spawn_y = argY + self.spawn_y_offset
+
+			self.render_all_tiles()
+
+			self.update_current_lawn_rom()
 
 	def handle_release(self, event):
 		self.pressing_m1 = False
@@ -106,7 +130,7 @@ class Lawnscaper(Frame):
 		current_stage_base = self.stage_rom_offset + self.stage_data_size * self.current_lawn
 		tile_offset = current_stage_base
 
-		tall_grass = 0
+		self.grass_count = 0
 
 		for i in range(self.tile_data_size):
 
@@ -123,7 +147,7 @@ class Lawnscaper(Frame):
 					continue
 
 				if self.tile_data[i*4 + tile] == 1:
-					tall_grass += 1
+					self.grass_count += 1
 
 				# self.tile_data.append(data_byte >> (6 - (tile * 2)) & 3)
 
@@ -133,13 +157,23 @@ class Lawnscaper(Frame):
 		# metadata after tile data, one byte each
 		# width, start x, start y, tile mowed goal, zero, tile percent value low, tile percent value high
 		metadata_offset = current_stage_base + self.tile_data_size
-		self.rom[metadata_offset + 3] = tall_grass
+		self.rom[metadata_offset] = self.map_width
 
-		# print("tall grass {}".format(tall_grass))
+		self.rom[metadata_offset+1] = self.spawn_x
+		self.rom[metadata_offset+2] = self.spawn_y
+
+		# grass count cannot exceed one byte (255).
+		# if more than 255 grass is on the level it will be complete before completely mowed
+		if self.grass_count > 255:
+			self.grass_count = 255
+
+		self.rom[metadata_offset + 3] = self.grass_count
+
+		# print("tall grass {}".format(self.grass_count))
 
 		# calculate the hi/lo percent value for each mowed tile for the stage metadata
-		if tall_grass > 0:
-			lo_value = int(100/tall_grass*255)
+		if self.grass_count > 0:
+			lo_value = int(100/self.grass_count*255)
 		else:
 			lo_value = 0
 		hi_value = 0
@@ -156,6 +190,23 @@ class Lawnscaper(Frame):
 		# TODO: (REMOVE THIS) reload current lawn for debugging (visually check that it was updated correctly)
 		# self.set_lawn(self.current_lawn)
 
+		self.update_title()
+
+	def update_title(self):
+		self.master.title("Lawnscaper - Lawn {} - Grass {} / 255".format(self.current_lawn+1, self.grass_count))
+
+	def change_lawn_width(self, argOffset):
+		# changes the current lawn with by the target offset (should be +1 or -1 increments ideally)
+		self.map_width += argOffset
+
+		if self.map_width < 14:
+			self.map_width = 14
+
+		if self.map_width > 30:
+			self.map_width = 30
+
+		self.resize_and_render_frame()
+
 	def load_lawn(self, argLawn):
 		# load lawn number (argLawn) into the editor based on the rom
 
@@ -163,8 +214,6 @@ class Lawnscaper(Frame):
 			return
 
 		self.current_lawn = argLawn
-
-		self.master.title("Lawnscaper - Lawn {}".format(self.current_lawn+1))
 
 		# for stage_number in range(10):
 
@@ -195,12 +244,19 @@ class Lawnscaper(Frame):
 
 		self.print_current_lawn()
 
+		self.resize_and_render_frame()
+
+	def resize_and_render_frame(self):
+
 		if not self.initialized:
 			self.initialized = True
 			self.init_frame()
 
 		root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
 		self.render_all_tiles()
+
+		# counts the grass and updates the internal structure
+		self.update_current_lawn_rom()
 
 	def print_current_lawn(self):
 		# print current lawn's internal data for debugging
@@ -209,7 +265,7 @@ class Lawnscaper(Frame):
 			if (i+1) % (32) == 0:
 				print()
 		print("lawn {}".format(self.current_lawn+1))
-		print(len(self.tile_data))
+		# print(len(self.tile_data))
 		sys.stdout.flush()
 
 	def get_tile(self, argX, argY):
@@ -269,7 +325,7 @@ class Lawnscaper(Frame):
 				outline="#ffffff", fill=fill_color, width=1)
 
 			# compare the spawn with the tile render offset (1,3) that ignores the borders
-			if self.spawn_x == argX+1 and self.spawn_y == argY+3:
+			if self.spawn_x == argX+self.spawn_x_offset and self.spawn_y == argY+self.spawn_y_offset:
 				spawn_size = 15
 				xpos += spawn_size
 				ypos += spawn_size
@@ -286,6 +342,7 @@ def main():
 
 	root.bind("<Control-s>", ex.save_as)
 	root.bind("<Button-1>", ex.handle_click)
+	root.bind("<Button-3>", ex.handle_rclick)
 	root.bind("<ButtonRelease-1>", ex.handle_release)
 	root.bind('<Motion>', ex.mouse_motion)
 	root.bind("1", lambda event, brush=0: ex.set_tile_brush(brush))
@@ -294,6 +351,8 @@ def main():
 	root.bind("4", lambda event, brush=3: ex.set_tile_brush(brush))
 	root.bind("<Prior>", ex.load_prev_lawn)
 	root.bind("<Next>", ex.load_next_lawn)
+	root.bind("-", lambda event, offset=-1: ex.change_lawn_width(offset))
+	root.bind("+", lambda event, offset=1: ex.change_lawn_width(offset))
 
 
 	root.resizable(0, 0)
