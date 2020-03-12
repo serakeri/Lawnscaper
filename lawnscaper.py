@@ -162,6 +162,9 @@ class Lawnscaper(Frame):
 		self.rom[metadata_offset+1] = self.spawn_x
 		self.rom[metadata_offset+2] = self.spawn_y
 
+		# update the title with the overflow grass count before limiting it to 1 byte (255)
+		self.update_title()
+
 		# grass count cannot exceed one byte (255).
 		# if more than 255 grass is on the level it will be complete before completely mowed
 		if self.grass_count > 255:
@@ -189,8 +192,6 @@ class Lawnscaper(Frame):
 
 		# TODO: (REMOVE THIS) reload current lawn for debugging (visually check that it was updated correctly)
 		# self.set_lawn(self.current_lawn)
-
-		self.update_title()
 
 	def update_title(self):
 		self.master.title("Lawnscaper - Lawn {} - Grass {} / 255".format(self.current_lawn+1, self.grass_count))
