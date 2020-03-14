@@ -5,17 +5,13 @@ import sys
 from tkinter import filedialog
 from tkinter import Tk, Canvas, Frame, BOTH
 
-if len(sys.argv) < 2:
-	print("Please pass the lawn mower rom as an argument.")
-	print("note: Map changes will not overwrite the specified rom.")
-	exit(1)
-
-root = Tk()
-
 class Lawnscaper(Frame):
 
-	def __init__(self, argRomFile):
+	def __init__(self, argRoot):
+
 		super().__init__()
+
+		self.root = argRoot
 
 		self.master.title("Lawnscaper")
 
@@ -38,14 +34,28 @@ class Lawnscaper(Frame):
 
 		self.current_brush = 1
 
-		self.orig_rom_filename = argRomFile
-
 		self.custom_file_name = "Lawn_Mower_custom.nes"
 
 		self.current_lawn = None
 
-		self.load_rom(argRomFile)
-		self.load_lawn(0)
+
+		self.root.bind("<Control-s>", self.save_as)
+		self.root.bind("<Button-1>", self.handle_click)
+		self.root.bind("<Button-3>", self.handle_rclick)
+		self.root.bind("<ButtonRelease-1>", self.handle_release)
+		self.root.bind('<Motion>', self.mouse_motion)
+		self.root.bind("1", lambda event, brush=0: self.set_tile_brush(brush))
+		self.root.bind("2", lambda event, brush=1: self.set_tile_brush(brush))
+		self.root.bind("3", lambda event, brush=2: self.set_tile_brush(brush))
+		self.root.bind("4", lambda event, brush=3: self.set_tile_brush(brush))
+		self.root.bind("<Prior>", self.load_prev_lawn)
+		self.root.bind("<Next>", self.load_next_lawn)
+		self.root.bind("-", lambda event, offset=-1: self.change_lawn_width(offset))
+		self.root.bind("+", lambda event, offset=1: self.change_lawn_width(offset))
+
+		self.root.resizable(0, 0)
+
+		self.root.geometry("+640+480")
 
 	def load_next_lawn(self, event):
 		self.load_lawn(self.current_lawn+1)
@@ -113,6 +123,9 @@ class Lawnscaper(Frame):
 			self.set_tile(motion_x, motion_y, self.current_brush)
 
 	def load_rom(self, argFilename):
+
+		self.orig_rom_filename = argFilename
+
 		# loads the specified rom into memory for editing
 		with open(argFilename, "rb") as rom:
 			self.rom = bytearray(rom.read())
@@ -120,6 +133,8 @@ class Lawnscaper(Frame):
 		expected_size = 24592
 		if len(self.rom) != expected_size:
 			print("Read {} bytes expecting {}".format(len(self.rom), expected_size))
+
+		self.load_lawn(0)
 
 	def update_current_lawn_rom(self):
 		# sync the rom in memory with tile_data
@@ -253,7 +268,7 @@ class Lawnscaper(Frame):
 			self.initialized = True
 			self.init_frame()
 
-		root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
+		self.root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
 		self.render_all_tiles()
 
 		# counts the grass and updates the internal structure
@@ -295,7 +310,7 @@ class Lawnscaper(Frame):
 
 		self.canvas = Canvas(self)
 
-		root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
+		self.root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
 
 		self.canvas.pack(fill=BOTH, expand=1)
 
@@ -337,28 +352,22 @@ class Lawnscaper(Frame):
 
 def main():
 
-	target_rom = sys.argv[1]
+	root = Tk()
 
-	ex = Lawnscaper(target_rom)
-
-	root.bind("<Control-s>", ex.save_as)
-	root.bind("<Button-1>", ex.handle_click)
-	root.bind("<Button-3>", ex.handle_rclick)
-	root.bind("<ButtonRelease-1>", ex.handle_release)
-	root.bind('<Motion>', ex.mouse_motion)
-	root.bind("1", lambda event, brush=0: ex.set_tile_brush(brush))
-	root.bind("2", lambda event, brush=1: ex.set_tile_brush(brush))
-	root.bind("3", lambda event, brush=2: ex.set_tile_brush(brush))
-	root.bind("4", lambda event, brush=3: ex.set_tile_brush(brush))
-	root.bind("<Prior>", ex.load_prev_lawn)
-	root.bind("<Next>", ex.load_next_lawn)
-	root.bind("-", lambda event, offset=-1: ex.change_lawn_width(offset))
-	root.bind("+", lambda event, offset=1: ex.change_lawn_width(offset))
+	ex = Lawnscaper(root)
 
 
-	root.resizable(0, 0)
+	if len(sys.argv) > 1:
+		target_rom = sys.argv[1]
+	else:
+		target_rom = filedialog.askopenfilename(title = "Select Lawn Mower rom", filetypes = (("nes","*.nes"),("all files","*.*")))
 
-	root.geometry("+200+200")
+		if target_rom is None or target_rom == "":
+			print("No lawn mower rom selected")
+			exit(1)
+
+	ex.load_rom(target_rom)
+
 	root.mainloop()
 
 if __name__ == '__main__':
