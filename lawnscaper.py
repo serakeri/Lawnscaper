@@ -38,7 +38,6 @@ class Lawnscaper(Frame):
 
 		self.current_lawn = None
 
-
 		self.root.bind("<Control-s>", self.save_as)
 		self.root.bind("<Button-1>", self.handle_click)
 		self.root.bind("<Button-3>", self.handle_rclick)
@@ -352,10 +351,9 @@ class Lawnscaper(Frame):
 
 def main():
 
+	# initialize and hide the tk window so a blank one does not appear during rom selection
 	root = Tk()
-
-	ex = Lawnscaper(root)
-
+	root.withdraw()
 
 	if len(sys.argv) > 1:
 		target_rom = sys.argv[1]
@@ -365,6 +363,11 @@ def main():
 		if target_rom is None or target_rom == "":
 			print("No lawn mower rom selected")
 			exit(1)
+
+	ex = Lawnscaper(root)
+
+	# show the window after it has been initialized
+	root.deiconify()
 
 	ex.load_rom(target_rom)
 
