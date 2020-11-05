@@ -297,8 +297,7 @@ class Lawnscaper(Frame):
 			self.tile_data[tile_offset] = argBrush
 			# update the lawn in memory
 			self.update_current_lawn_rom()
-
-			self.render_tile(argX, argY)
+			self.render_all_tiles()
 
 	def get_tile_data_offset(self, argX, argY):
 		# add one to X to hide the left border
@@ -317,37 +316,38 @@ class Lawnscaper(Frame):
 
 	def render_all_tiles(self):
 
+		# clear existing canvas objects before creating new rectangles on canvas
+		self.canvas.delete('all')
+
 		# note: the tile data includes room for the border but it will not be rendered in the UI.
 		# 		since the left border is ignored need to render one further than the width
 		for x in range(self.map_width+1):
 			for y in range(self.map_height):
-				self.render_tile(x, y)
 
-	def render_tile(self, argX, argY):
-			xpos = argX * self.tile_size
-			ypos = argY * self.tile_size
+				xpos = x * self.tile_size
+				ypos = y * self.tile_size
 
-			fill_color = "#1f1"
+				fill_color = "#1f1"
 
-			tile_id = self.get_tile(argX, argY)
+				tile_id = self.get_tile(x, y)
 
-			colors = ["#00ff00", "#00a500", "#fc7460", "#bcbcbc"]
+				colors = ["#00ff00", "#00a500", "#fc7460", "#bcbcbc"]
 
-			fill_color = colors[tile_id]
+				fill_color = colors[tile_id]
 
-			self.canvas.create_rectangle(xpos, ypos, 
-				xpos + self.tile_size, ypos + self.tile_size, 
-				outline="#ffffff", fill=fill_color, width=1)
+				self.canvas.create_rectangle(xpos, ypos,
+					xpos + self.tile_size, ypos + self.tile_size,
+					outline="#ffffff", fill=fill_color, width=1)
 
-			# compare the spawn with the tile render offset (1,3) that ignores the borders
-			if self.spawn_x == argX+self.spawn_x_offset and self.spawn_y == argY+self.spawn_y_offset:
-				spawn_size = 15
-				xpos += spawn_size
-				ypos += spawn_size
-				self.canvas.create_rectangle(xpos, ypos, 
-					xpos + self.tile_size - spawn_size * 2,
-					ypos + self.tile_size- spawn_size * 2, 
-					outline="#000000", fill="#ff0000", width=1)
+				# compare the spawn with the tile render offset (1,3) that ignores the borders
+				if self.spawn_x == x+self.spawn_x_offset and self.spawn_y == y+self.spawn_y_offset:
+					spawn_size = 15
+					xpos += spawn_size
+					ypos += spawn_size
+					self.canvas.create_rectangle(xpos, ypos, 
+						xpos + self.tile_size - spawn_size * 2,
+						ypos + self.tile_size- spawn_size * 2,
+						outline="#000000", fill="#ff0000", width=1)
 
 def main():
 
