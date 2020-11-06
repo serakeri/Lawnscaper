@@ -70,7 +70,7 @@ class Lawnscaper(Frame):
 		file_name = filedialog.asksaveasfilename(initialdir=target_rom_dir, initialfile=self.custom_file_name,
 			title = "Select file", filetypes = (("nes","*.nes"),("all files","*.*")))
 
-		if file_name is not None:
+		if file_name is not None and len(file_name) > 0:
 
 			self.custom_file_name = os.path.basename(file_name)
 
