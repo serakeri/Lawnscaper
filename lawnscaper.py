@@ -208,7 +208,7 @@ class Lawnscaper(Frame):
 		# self.set_lawn(self.current_lawn)
 
 	def update_title(self):
-		self.master.title("Lawnscaper - Lawn {} - Grass {} / 255".format(self.current_lawn+1, self.grass_count))
+		self.master.title("Lawnscaper by serakeri - Lawn {} - Grass {} / 255".format(self.current_lawn+1, self.grass_count))
 
 	def change_lawn_width(self, argOffset):
 		# changes the current lawn with by the target offset (should be +1 or -1 increments ideally)
