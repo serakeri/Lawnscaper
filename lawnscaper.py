@@ -2,8 +2,9 @@
 
 import os
 import sys
+import time
 from tkinter import filedialog
-from tkinter import Tk, Canvas, Frame, BOTH
+from tkinter import Tk, Canvas, PhotoImage, Label, Frame, BOTH
 
 class Lawnscaper(Frame):
 
@@ -19,7 +20,7 @@ class Lawnscaper(Frame):
 
 		self.pressing_m1 = False
 
-		self.tile_size = 50
+		self.tile_size = 48
 
 		# the game counts the border as tiles. store these offsets to make the top left coord (0, 0)
 		self.spawn_x_offset = 1
@@ -28,6 +29,7 @@ class Lawnscaper(Frame):
 		self.map_width = 16
 		self.map_height = 11
 
+		self.pattern_table_offset = 0x4010
 		self.stage_rom_offset = 0x5010
 		self.tile_data_size = 0x58
 		self.stage_data_size = self.tile_data_size + 7
@@ -38,19 +40,39 @@ class Lawnscaper(Frame):
 
 		self.current_lawn = None
 
+		self.pattern_table_width = 128
+		self.pattern_table_height = 128
+
+		self.show_images = True
+		self.show_grid = True
+		self.show_animation = True
+
+		self.decrease_lawn_width = lambda event, offset=-1: self.change_lawn_width(offset)
+		self.increase_lawn_width = lambda event, offset=1: self.change_lawn_width(offset)
+
 		self.root.bind("<Control-s>", self.save_as)
 		self.root.bind("<Button-1>", self.handle_click)
 		self.root.bind("<Button-3>", self.handle_rclick)
-		self.root.bind("<ButtonRelease-1>", self.handle_release)
+		self.root.bind("<ButtonRelease-1>", self.handle_mouse_release)
 		self.root.bind('<Motion>', self.mouse_motion)
 		self.root.bind("1", lambda event, brush=0: self.set_tile_brush(brush))
 		self.root.bind("2", lambda event, brush=1: self.set_tile_brush(brush))
 		self.root.bind("3", lambda event, brush=2: self.set_tile_brush(brush))
 		self.root.bind("4", lambda event, brush=3: self.set_tile_brush(brush))
+
+		self.root.bind("i", self.toggle_show_images)
+		self.root.bind("g", self.toggle_show_grid)
+		self.root.bind("a", self.toggle_show_animation)
+
 		self.root.bind("<Prior>", self.load_prev_lawn)
 		self.root.bind("<Next>", self.load_next_lawn)
-		self.root.bind("-", lambda event, offset=-1: self.change_lawn_width(offset))
-		self.root.bind("+", lambda event, offset=1: self.change_lawn_width(offset))
+		self.root.bind("<Up>", self.load_prev_lawn)
+		self.root.bind("<Down>", self.load_next_lawn)
+
+		self.root.bind("-", self.decrease_lawn_width)
+		self.root.bind("+", self.increase_lawn_width)
+		self.root.bind("<Left>", self.decrease_lawn_width)
+		self.root.bind("<Right>", self.increase_lawn_width)
 
 		self.root.resizable(0, 0)
 
@@ -61,6 +83,17 @@ class Lawnscaper(Frame):
 
 	def load_prev_lawn(self, event):
 		self.load_lawn(self.current_lawn-1)
+
+	def toggle_show_images(self, event):
+		self.show_images = not self.show_images
+		self.render_all_tiles()
+
+	def toggle_show_grid(self, event):
+		self.show_grid = not self.show_grid
+		self.render_all_tiles()
+
+	def toggle_show_animation(self, event):
+		self.show_animation = not self.show_animation
 
 	def save_as(self, event):
 		# save the current rom in memory to the specified file.
@@ -78,15 +111,11 @@ class Lawnscaper(Frame):
 				file.write(self.rom)
 
 	def set_tile_brush(self, argBrush):
-		# print("set brush {}".format(argBrush))
-		# sys.stdout.flush()
 		self.current_brush = argBrush
 
 	def handle_click(self, event):
 		clicked_x = int(event.x / self.tile_size)
 		clicked_y = int(event.y / self.tile_size)
-		# print("clicked at", clicked_x, clicked_y)
-		# sys.stdout.flush()
 
 		self.pressing_m1 = True
 
@@ -100,9 +129,6 @@ class Lawnscaper(Frame):
 
 	def set_spawn_point(self, argX, argY):
 
-		# print("spawn {}, {}".format(argX, argY))
-		# sys.stdout.flush()
-
 		if argX < self.map_width and argY < self.map_height:
 
 			self.spawn_x = argX + self.spawn_x_offset
@@ -112,7 +138,7 @@ class Lawnscaper(Frame):
 
 			self.update_current_lawn_rom()
 
-	def handle_release(self, event):
+	def handle_mouse_release(self, event):
 		self.pressing_m1 = False
 
 	def mouse_motion(self, event):
@@ -261,11 +287,18 @@ class Lawnscaper(Frame):
 
 		self.resize_and_render_frame()
 
+	def process_animation(self):
+		if self.show_animation:
+			self.render_all_tiles()
+		self.after(100, self.process_animation)
+
 	def resize_and_render_frame(self):
 
 		if not self.initialized:
 			self.initialized = True
+			self.initialize_tile_images()
 			self.init_frame()
+			self.root.after(100, self.process_animation)
 
 		self.root.geometry("{}x{}".format(self.tile_size * self.map_width, self.tile_size * self.map_height))
 		self.render_all_tiles()
@@ -314,6 +347,27 @@ class Lawnscaper(Frame):
 
 		self.render_all_tiles()
 
+	def image_for_tile(self, x, y):
+		tile_id = self.get_tile(x, y)
+		tile_img = [self.img_cut_grass, self.img_tall_grass, self.img_flower_1, self.img_rock]
+		if tile_id == 0:
+			return self.img_cut_grass if (x + y) % 2 else self.img_cut_grass_2
+		elif tile_id == 1:
+			return self.img_tall_grass if (x + y) % 2 else self.img_tall_grass_2
+		elif tile_id == 2:
+			if self.show_animation:
+				current_time = time.time() % 1
+				anim_frames = [0, 1, 0]
+				anim_timing = [0.33, 0.66, 1]
+				this_frame = 0
+				while current_time > anim_timing[this_frame]:
+					this_frame += 1
+				return [self.img_flower_1, self.img_flower_2][anim_frames[this_frame]]
+			else:
+				return self.img_flower_2
+		else:
+			return tile_img[tile_id]
+
 	def render_all_tiles(self):
 
 		# clear existing canvas objects before creating new rectangles on canvas
@@ -327,17 +381,18 @@ class Lawnscaper(Frame):
 				xpos = x * self.tile_size
 				ypos = y * self.tile_size
 
-				fill_color = "#1f1"
-
 				tile_id = self.get_tile(x, y)
 
-				colors = ["#00ff00", "#00a500", "#fc7460", "#bcbcbc"]
+				if self.show_images:
+					self.canvas.create_image((xpos, ypos), image=self.image_for_tile(x, y), state="normal", anchor="nw")
+				else:
+					colors = ["#00a500", "#00ff00", "#fc7460", "#bcbcbc"]
+					fill_color = colors[tile_id]
 
-				fill_color = colors[tile_id]
-
-				self.canvas.create_rectangle(xpos, ypos,
-					xpos + self.tile_size, ypos + self.tile_size,
-					outline="#ffffff", fill=fill_color, width=1)
+					grid_width = 1 if self.show_grid else 0
+					self.canvas.create_rectangle(xpos, ypos,
+						xpos + self.tile_size, ypos + self.tile_size,
+						outline="#ffffff", fill=fill_color, width=grid_width)
 
 				# compare the spawn with the tile render offset (1,3) that ignores the borders
 				if self.spawn_x == x+self.spawn_x_offset and self.spawn_y == y+self.spawn_y_offset:
@@ -348,6 +403,108 @@ class Lawnscaper(Frame):
 						xpos + self.tile_size - spawn_size * 2,
 						ypos + self.tile_size- spawn_size * 2,
 						outline="#000000", fill="#ff0000", width=1)
+
+		# for image mode grid the grid is drawn after the borderless images
+		if self.show_images and self.show_grid:
+			for y in range(self.map_height):
+				ypos = y * self.tile_size
+				for x in range(self.map_width):
+					xpos = x * self.tile_size
+					self.canvas.create_line(xpos, 0, xpos, self.map_height * self.tile_size, fill="#ffffff")
+				self.canvas.create_line(0, ypos, self.map_width * self.tile_size, ypos, fill="#ffffff")
+
+	def initialize_tile_images(self):
+		# create images from the rom's pattern table
+		width = self.pattern_table_width
+		height = self.pattern_table_height
+		image_scale = 2
+
+		pattern_table_data = [bytearray(width*height), bytearray(width*height)]
+
+		# img = [PhotoImage(width=width, height=height), PhotoImage(width=width, height=height)]
+		# for x in range(width):
+		# 	for y in range(height):
+		# 		img.put("#FF0000" if (x + y) % 2 == 0 else "#FFFFFF", (x, y))
+
+		current_offset = self.pattern_table_offset
+
+		for pattern_table_id in range(2):
+			for pattern_table_y in range(16):
+				for pattern_table_x in range(16):
+					# each 8x8 tile's palette is represented by 2 bit planes
+					for plane in range(2):
+						for y in range(8):
+							data_byte = self.rom[current_offset]
+
+							for x in range(8):
+								pixel_x = pattern_table_x * 8 + x
+								pixel_y = pattern_table_y * 8 + y
+								pattern_table_data[pattern_table_id][pixel_x + pixel_y * width] |= (plane+1) * ((data_byte >> (7 - x)) & 1)
+
+							current_offset += 1
+
+		# background letter palette
+		palette_0 = ["#000000", "#9D5400", "#FA9E00", "#FFFFFF"]
+		# flower tile palette
+		palette_1 = ["#000000", "#005C00", "#E9E681", "#FF7757"]
+		# grass tile palette
+		palette_2 = ["#000000", "#005C00", "#00A300", "#7AE700"]
+		# rock tile palette
+		palette_3 = ["#000000", "#005C00", "#ABABAB", "#FFFFFF"]
+
+		# for pattern_table_id in range(2):
+		# 	for i in range(width * height):
+		# 		palette_bits = pattern_table_data[pattern_table_id][i]
+		# 		# print(f"{int(current_pixel % width)} : {int(current_pixel / width)}")
+		# 		img[pattern_table_id].put(palette_2[palette_bits], (i % width, i // width))
+		# 		# print(f'put {(int(i % width), int(i / width))} : {palette_color}')
+
+		# 	img[pattern_table_id] = img[pattern_table_id].zoom(image_scale)
+		# 	self.canvas.create_image((8 + pattern_table_id * width * image_scale, 8), image=img[pattern_table_id], state="normal", anchor="nw")
+
+		# create a reference to the image so it is kept in memory
+		# self.img_ref = img
+
+		self.img_cut_grass = self.image_from_pattern_table(pattern_table_data[0], 0, 8, palette_2)
+		self.img_cut_grass = self.img_cut_grass.zoom(3)
+		# self.canvas.create_image((0, 0), image=self.img_cut_grass, state="normal", anchor="nw")
+
+		self.img_cut_grass_2 = self.image_from_pattern_table(pattern_table_data[0], 2, 8, palette_2)
+		self.img_cut_grass_2 = self.img_cut_grass_2.zoom(3)
+		# self.canvas.create_image((0, 64), image=self.img_cut_grass_2, state="normal", anchor="nw")
+
+		self.img_tall_grass = self.image_from_pattern_table(pattern_table_data[0], 4, 8, palette_2)
+		self.img_tall_grass = self.img_tall_grass.zoom(3)
+		# self.canvas.create_image((64, 0), image=self.img_tall_grass, state="normal", anchor="nw")
+
+		self.img_tall_grass_2 = self.image_from_pattern_table(pattern_table_data[0], 6, 8, palette_2)
+		self.img_tall_grass_2 = self.img_tall_grass_2.zoom(3)
+		# self.canvas.create_image((64, 64), image=self.img_tall_grass_2, state="normal", anchor="nw")
+
+		self.img_flower_1 = self.image_from_pattern_table(pattern_table_data[0], 8, 8, palette_1)
+		self.img_flower_1 = self.img_flower_1.zoom(3)
+		# self.canvas.create_image((128, 0), image=self.img_flower_1, state="normal", anchor="nw")
+
+		self.img_flower_2 = self.image_from_pattern_table(pattern_table_data[1], 8, 8, palette_1)
+		self.img_flower_2 = self.img_flower_2.zoom(3)
+		# self.canvas.create_image((128, 64), image=self.img_flower_2, state="normal", anchor="nw")
+
+		self.img_rock = self.image_from_pattern_table(pattern_table_data[0], 12, 8, palette_3)
+		self.img_rock = self.img_rock.zoom(3)
+		# self.canvas.create_image((192, 0), image=self.img_rock, state="normal", anchor="nw")
+
+	def image_from_pattern_table(self, pattern_table_data, tile_x, tile_y, palette):
+		# return tkinter PhotoImage for a 2x2 pattern tile at the specificated location for the given pattern table
+		game_tile_width = 16
+		game_tile_height = 16
+		tile_img = PhotoImage(width=game_tile_width, height=game_tile_height)
+		for y in range(game_tile_height):
+			pattern_table_y = tile_y * 8 + y
+			for x in range(game_tile_width):
+				pattern_table_x = tile_x * 8 + x
+				palette_bits = pattern_table_data[pattern_table_x + pattern_table_y * self.pattern_table_width]
+				tile_img.put(palette[palette_bits], (x, y))
+		return tile_img
 
 def main():
 
@@ -375,4 +532,3 @@ def main():
 
 if __name__ == '__main__':
 	main()
-

@@ -22,7 +22,14 @@ Left Click      Draw the current selected tile brush
 2               Select unmowed grass tile brush
 3               Select flower tile brush
 4               Select rock tile brush
-Page Up         Go to previous level
-Page Down       Go to next level
-Num-            Decrease width of current level
-Num+            Increase width of current level
+Page Up
+or Up Arrow     Go to previous level
+Page Down
+or Down Arrow   Go to next level
+NumPad-
+or Left Arrow   Decrease width of current level
+NumPad+
+or Right Arrow  Increase width of current level
+i               Toggle show images
+g               Toggle show grid
+a               Toggle flower animation
